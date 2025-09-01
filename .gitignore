@@ -1,4 +1,5 @@
 musicas/
 musicas/*
+__*
 venv/
 *.pth
