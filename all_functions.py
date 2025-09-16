@@ -1,15 +1,15 @@
-import librosa, os, h5py, random
+import librosa, os, h5py, random, subprocess 
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
+from logger import log
 import numpy as np
 
-def search_and_download(resultados, pasta):
+def search_and_download(resultados, pasta, stop_thread_flag):
     musicas_por_artista = 5
-    global stop_thread
     # input(pasta)
     baixadas = 0
     for video in resultados['result']:
-        if stop_thread:
+        if stop_thread_flag():
             return
         video_mins = video["duration"].split(":")
         if len(video_mins) >= 3:
@@ -42,8 +42,12 @@ def get_start_times(duration):
         "meio": max(0, (duration / 2) - 15),
         "fim": max(0, duration - 30)
     }
-    start_times["inicio_meio"] = (start_times["inicio"] + start_times["meio"]) / 2
-    start_times["meio_fim"] = (start_times["meio"] + start_times["fim"]) / 2
+
+    inicio_meio = (start_times["inicio"] + start_times["meio"]) / 2
+    meio_fim = (start_times["meio"] + start_times["fim"]) / 2
+    start_times["inicio_meio"] = inicio_meio
+    if start_times["fim"] - meio_fim >= 30:
+        start_times["meio_fim"] = meio_fim
     return start_times
 
 def save_plot_spec(S_db, sr, music_name, dir_base, estilo, dir_spec, label):
@@ -57,16 +61,32 @@ def save_plot_spec(S_db, sr, music_name, dir_base, estilo, dir_spec, label):
     plt.savefig(os.path.join(dir_base, estilo, dir_spec, f"spectrogram_{label}_{music_name}.png"))
     plt.close()
 
+def dir_to_mel_and_save_h5(estilo, musicas, musica, dir_base, dir_h5, i):
+    log(estilo, f"{i+1}/{len(musicas)}", i+1, len(musicas), progress_char="|", void_char="_")
+    music_name = musica.replace(".webm", "")
+    music_name = music_name.replace(".mp3", "")
+    file_path = os.path.join(dir_base, estilo, musica)
+    y, sr = librosa.load(file_path, sr=None)
+    duration = librosa.get_duration(y=y, sr=sr)
+    start_times = get_start_times(duration)
+    for i, (label, start_time) in enumerate(start_times.items()):
+        start_sample = int(start_time * sr)
+        end_sample = start_sample + int(30 * sr)
+        segment = y[start_sample:end_sample]
+
+        mel_spec_and_save_h5(segment, sr, dir_base, estilo, dir_h5, music_name, i)
+
 def mel_spec_and_save_h5(segment, sr, dir_base, estilo, dir_h5, music_name, label):
     S = librosa.feature.melspectrogram(y=segment, sr=sr, n_mels=128, fmax=8000)
     S_db = librosa.power_to_db(S, ref=np.max)
     S_norm = (S_db + 80) / 80
     input_array = np.expand_dims(S_norm, axis=0)
-    print(input_array.shape)
-    return
+    if input_array.shape != (1, 128, 2813):
+        print(input_array.shape)
+        return
     # input_array = np.expand_dims(input_array, axis=0)
     # input_array = zoom(input_array, (.5, .5, 1))
     if not os.path.exists(os.path.join(dir_base, estilo, dir_h5)):
         os.makedirs(os.path.join(dir_base, estilo, dir_h5))
-    with h5py.File(os.path.join(dir_base, estilo, dir_h5, f"spectrogram_{estilo}_{random.randint(0, 10000)}_{label}_{music_name}.h5"), 'w') as f:
+    with h5py.File(os.path.join(dir_base, estilo, dir_h5, f"spectrogram_{estilo}_{music_name}_{label}.h5"), 'w') as f:
         f.create_dataset("data", data=input_array, compression="gzip")

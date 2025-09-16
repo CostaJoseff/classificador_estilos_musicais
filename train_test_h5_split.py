@@ -1,17 +1,19 @@
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split 
 import os, shutil, random
 
 dir_base = "musicas"
 dir_h5 = "h5"
+train_percent = .8
 
 estilos = os.listdir(dir_base)
 for estilo in estilos:
     h5_path = os.path.join(dir_base, estilo, dir_h5)
     specs = os.listdir(h5_path)
-    random.shuffle(specs)
-    indice_70 = int(len(specs) * 0.7)
-    train = specs[:indice_70]
-    test = specs[indice_70:]
+    specs.sort()
+    # random.shuffle(specs)
+    max_indice_train = int(len(specs) * train_percent)
+    train = specs[:max_indice_train]
+    test = specs[max_indice_train:]
 
 
     train_path = os.path.join(h5_path, "train")
